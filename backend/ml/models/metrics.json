@@ -1,0 +1,18 @@
+{
+  "dataset": "andhra_pradesh_crop_production_dataset1.csv",
+  "records_used": 9561,
+  "split": "train through 2010; test 2011-2014",
+  "models": {
+    "decision_tree": {
+      "mae": 1038781.888,
+      "rmse": 15640445.038,
+      "r2": 0.8153
+    },
+    "random_forest": {
+      "mae": 982999.465,
+      "rmse": 14681949.392,
+      "r2": 0.8373
+    }
+  },
+  "selected_model": "random_forest"
+}
