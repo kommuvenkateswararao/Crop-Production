@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useState } from "react";
 import {
   LayoutDashboard,
@@ -31,11 +30,10 @@ import {
 
 import "./App.css";
 
-// Live Render backend URL.
-// You can override this using VITE_API_URL in frontend/.env.
+// Live Render backend URL
 const API_URL = (
   import.meta.env.VITE_API_URL ||
-  "https://crop-production-wf0y.onrender.com"
+  "https://crop-production-hvze.onrender.com"
 ).replace(/\/+$/, "");
 
 const numberFormat = new Intl.NumberFormat("en-IN", {
