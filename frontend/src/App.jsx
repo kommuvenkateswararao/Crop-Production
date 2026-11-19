@@ -9,8 +9,6 @@ import {
   Leaf,
   Wheat,
   BarChart3,
-  TrendingUp,
-  Activity,
   FlaskConical,
   LoaderCircle,
 } from "lucide-react";
@@ -33,7 +31,12 @@ import {
 
 import "./App.css";
 
-const API_URL = "http://127.0.0.1:8001";
+// Live Render backend URL.
+// You can override this using VITE_API_URL in frontend/.env.
+const API_URL = (
+  import.meta.env.VITE_API_URL ||
+  "https://crop-production-wf0y.onrender.com"
+).replace(/\/+$/, "");
 
 const numberFormat = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2,
@@ -57,11 +60,11 @@ const chartColors = [
 
 async function apiRequest(endpoint, options = {}) {
   const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
     headers: {
       "Content-Type": "application/json",
       ...options.headers,
     },
-    ...options,
   });
 
   if (!response.ok) {
@@ -69,9 +72,12 @@ async function apiRequest(endpoint, options = {}) {
 
     try {
       const errorData = await response.json();
-      message = errorData.detail || message;
+      message =
+        errorData.detail ||
+        errorData.message ||
+        message;
     } catch {
-      // Keep the default error message.
+      // Keep default error message.
     }
 
     throw new Error(message);
@@ -87,6 +93,7 @@ function App() {
   const [yearData, setYearData] = useState([]);
   const [districtData, setDistrictData] = useState([]);
   const [cropData, setCropData] = useState([]);
+
   const [filters, setFilters] = useState({
     districts: [],
     crops: [],
@@ -111,6 +118,7 @@ function App() {
   const [predicting, setPredicting] = useState(false);
   const [predictionError, setPredictionError] = useState("");
 
+  // Load dashboard data
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -141,9 +149,18 @@ function App() {
 
       setPredictionForm((previous) => ({
         ...previous,
-        district: previous.district || filtersResult.districts?.[0] || "",
-        crop: previous.crop || filtersResult.crops?.[0] || "",
-        season: previous.season || filtersResult.seasons?.[0] || "",
+        district:
+          previous.district ||
+          filtersResult.districts?.[0] ||
+          "",
+        crop:
+          previous.crop ||
+          filtersResult.crops?.[0] ||
+          "",
+        season:
+          previous.season ||
+          filtersResult.seasons?.[0] ||
+          "",
         year:
           previous.year ||
           (filtersResult.years?.length
@@ -152,7 +169,7 @@ function App() {
       }));
     } catch (err) {
       setError(
-        `${err.message}. Check that your FastAPI backend is running at ${API_URL}.`
+        `${err.message}. Please check the deployed backend at ${API_URL}.`
       );
     } finally {
       setLoading(false);
@@ -163,6 +180,7 @@ function App() {
     loadDashboard();
   }, [loadDashboard]);
 
+  // Sidebar navigation
   const navigateTo = (section) => {
     setActiveNav(section);
 
@@ -172,6 +190,7 @@ function App() {
     });
   };
 
+  // Update prediction form
   const updatePredictionField = (event) => {
     const { name, value } = event.target;
 
@@ -184,6 +203,7 @@ function App() {
     }));
   };
 
+  // Predict crop production
   const handlePrediction = async (event) => {
     event.preventDefault();
 
@@ -195,12 +215,19 @@ function App() {
       !predictionForm.crop ||
       !predictionForm.season
     ) {
-      setPredictionError("Please select a district, crop, and season.");
+      setPredictionError(
+        "Please select a district, crop, and season."
+      );
       return;
     }
 
-    if (!predictionForm.area || predictionForm.area <= 0) {
-      setPredictionError("Please enter an area greater than zero.");
+    if (
+      !predictionForm.area ||
+      predictionForm.area <= 0
+    ) {
+      setPredictionError(
+        "Please enter an area greater than zero."
+      );
       return;
     }
 
@@ -220,7 +247,9 @@ function App() {
     }
   };
 
-  const totalProduction = summary?.total_production_tonnes || 0;
+  // Dashboard calculations
+  const totalProduction =
+    summary?.total_production_tonnes || 0;
 
   const yearChartData = yearData.map((item) => ({
     year: String(item.year),
@@ -247,6 +276,7 @@ function App() {
 
   return (
     <div className="app-shell">
+
       {/* SIDEBAR */}
       <aside className="sidebar">
         <div className="brand">
@@ -313,11 +343,14 @@ function App() {
 
       {/* MAIN CONTENT */}
       <main className="main-content">
+
         {/* DASHBOARD HEADER */}
         <header className="topbar" id="dashboard">
           <div>
             <h1>Crop Production Dashboard</h1>
-            <p>Andhra Pradesh • Historical agricultural analysis</p>
+            <p>
+              Andhra Pradesh • Historical agricultural analysis
+            </p>
           </div>
 
           <button
@@ -335,7 +368,10 @@ function App() {
           <div className="error-box">
             <strong>Could not load dashboard data.</strong>
             <p>{error}</p>
-            <button className="refresh-btn" onClick={loadDashboard}>
+            <button
+              className="refresh-btn"
+              onClick={loadDashboard}
+            >
               Try again
             </button>
           </div>
@@ -352,8 +388,12 @@ function App() {
         {/* WELCOME CARD */}
         <section className="welcome-card">
           <div>
-            <span className="welcome-tag">AGRICULTURE ANALYTICS</span>
+            <span className="welcome-tag">
+              AGRICULTURE ANALYTICS
+            </span>
+
             <h2>Welcome to CropVision</h2>
+
             <p>
               Explore historical crop production, compare districts,
               and estimate crop production using machine learning.
@@ -423,7 +463,9 @@ function App() {
             <p>Total Cultivated Area</p>
             <h2>
               {summary
-                ? compactFormat.format(summary.total_area_hectares)
+                ? compactFormat.format(
+                    summary.total_area_hectares
+                  )
                 : "--"}
             </h2>
             <small>Hectares</small>
@@ -455,10 +497,14 @@ function App() {
         {/* CROP ANALYTICS */}
         <section className="section-title" id="analytics">
           <h2>Crop Analytics</h2>
-          <p>Understand crop production trends and crop-wise performance.</p>
+          <p>
+            Understand crop production trends and crop-wise performance.
+          </p>
         </section>
 
         <section className="charts-grid">
+
+          {/* PRODUCTION BY YEAR */}
           <div className="panel">
             <h3>Production by Year</h3>
             <p className="panel-subtitle">
@@ -503,6 +549,7 @@ function App() {
             </div>
           </div>
 
+          {/* TOP CROPS */}
           <div className="panel">
             <h3>Top Crops by Production</h3>
             <p className="panel-subtitle">
@@ -525,15 +572,21 @@ function App() {
                       {cropPieData.map((entry, index) => (
                         <Cell
                           key={`${entry.name}-${index}`}
-                          fill={chartColors[index % chartColors.length]}
+                          fill={
+                            chartColors[
+                              index % chartColors.length
+                            ]
+                          }
                         />
                       ))}
                     </Pie>
+
                     <Tooltip
                       formatter={(value) =>
                         numberFormat.format(value) + " tonnes"
                       }
                     />
+
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
@@ -543,6 +596,7 @@ function App() {
             </div>
           </div>
 
+          {/* CROP COMPARISON */}
           <div className="panel full-panel">
             <h3>Crop-wise Production Comparison</h3>
             <p className="panel-subtitle">
@@ -554,7 +608,11 @@ function App() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={cropChartData}
-                    margin={{ bottom: 35, left: 10, right: 15 }}
+                    margin={{
+                      bottom: 35,
+                      left: 10,
+                      right: 15,
+                    }}
                   >
                     <CartesianGrid
                       strokeDasharray="3 3"
@@ -596,7 +654,9 @@ function App() {
         {/* DISTRICT ANALYSIS */}
         <section className="section-title" id="district">
           <h2>District Analysis</h2>
-          <p>Compare historical agricultural production across districts.</p>
+          <p>
+            Compare historical agricultural production across districts.
+          </p>
         </section>
 
         <section className="panel full-panel">
@@ -611,7 +671,10 @@ function App() {
                 <BarChart
                   data={districtChartData}
                   layout="vertical"
-                  margin={{ left: 35, right: 25 }}
+                  margin={{
+                    left: 35,
+                    right: 25,
+                  }}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -663,6 +726,7 @@ function App() {
         <section className="prediction-panel">
           <form onSubmit={handlePrediction}>
             <div className="form-grid">
+
               <label>
                 Select District
                 <select
@@ -672,6 +736,7 @@ function App() {
                   required
                 >
                   <option value="">Choose district</option>
+
                   {filters.districts.map((district) => (
                     <option key={district} value={district}>
                       {district}
@@ -689,6 +754,7 @@ function App() {
                   required
                 >
                   <option value="">Choose crop</option>
+
                   {filters.crops.map((crop) => (
                     <option key={crop} value={crop}>
                       {crop}
@@ -706,6 +772,7 @@ function App() {
                   required
                 >
                   <option value="">Choose season</option>
+
                   {filters.seasons.map((season) => (
                     <option key={season} value={season}>
                       {season}
@@ -782,6 +849,7 @@ function App() {
             </button>
           </form>
 
+          {/* PREDICTION RESULT */}
           {prediction && (
             <div className="prediction-result">
               <span>PREDICTED CROP PRODUCTION</span>
@@ -828,36 +896,48 @@ function App() {
               <>
                 <p>
                   Selected model:{" "}
-                  <strong>{metrics.selected_model?.replace("_", " ")}</strong>
+                  <strong>
+                    {metrics.selected_model?.replace("_", " ")}
+                  </strong>
                 </p>
 
                 <p>
                   Training records:{" "}
-                  <strong>{numberFormat.format(metrics.records_used)}</strong>
+                  <strong>
+                    {numberFormat.format(metrics.records_used)}
+                  </strong>
                 </p>
 
                 {selectedModelMetrics && (
                   <p>
-                    MAE: {numberFormat.format(selectedModelMetrics.mae)}
+                    MAE:{" "}
+                    {numberFormat.format(selectedModelMetrics.mae)}
                     {" | "}
-                    RMSE: {numberFormat.format(selectedModelMetrics.rmse)}
+                    RMSE:{" "}
+                    {numberFormat.format(selectedModelMetrics.rmse)}
                     {" | "}
                     R²: {selectedModelMetrics.r2}
                   </p>
                 )}
               </>
             ) : (
-              <p>Model performance information is not available.</p>
+              <p>
+                Model performance information is not available.
+              </p>
             )}
           </div>
         </section>
 
+        {/* FOOTER */}
         <footer>
           <p>
             CropVision • Crop Production System • Andhra Pradesh
           </p>
-          <p>Academic project using historical agricultural data and ML</p>
+          <p>
+            Academic project using historical agricultural data and ML
+          </p>
         </footer>
+
       </main>
     </div>
   );
