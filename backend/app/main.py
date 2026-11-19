@@ -1,13 +1,16 @@
-from pathlib import Path
+
 import os
 import secrets
-from fastapi import FastAPI, Depends, HTTPException, Query
+import json
+from pathlib import Path
+
+import joblib
+import pandas as pd
+
+from fastapi import FastAPI, Depends, HTTPException, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from pathlib import Path
-import joblib
-import pandas as pd
 
 from .database import Base, engine, get_db
 from .models import ProductionRecord, PredictionHistory
@@ -58,10 +61,11 @@ def root():
 def health():
     return {"status": "ok"}
 
-# Temporary protected endpoint to import Andhra Pradesh dataset
+
+# Temporary protected dataset import endpoint
 @app.post("/api/admin/import-dataset")
 def import_dataset(
-    import_token: str = Query(..., alias="token"),
+    import_token: str = Header(..., alias="X-Import-Token"),
     db: Session = Depends(get_db)
 ):
     expected_token = os.getenv("CROP_IMPORT_TOKEN")
@@ -89,6 +93,7 @@ def import_dataset(
             detail=f"Import stopped: {existing_count} Andhra Pradesh records already exist"
         )
 
+    # Primary Andhra Pradesh dataset on GitHub
     csv_url = (
         "https://raw.githubusercontent.com/"
         "kommuvenkateswararao/Crop-Production/TRW/"
@@ -99,14 +104,26 @@ def import_dataset(
     try:
         df = pd.read_csv(csv_url)
 
+        # Standardize district column
         if "district" not in df.columns and "district_name" in df.columns:
-            df = df.rename(columns={"district_name": "district"})
+            df = df.rename(
+                columns={"district_name": "district"}
+            )
 
+        # Validate required columns
         required = [
-            "district", "year", "season", "crop", "area", "production"
+            "district",
+            "year",
+            "season",
+            "crop",
+            "area",
+            "production"
         ]
 
-        missing = [c for c in required if c not in df.columns]
+        missing = [
+            column for column in required
+            if column not in df.columns
+        ]
 
         if missing:
             raise HTTPException(
@@ -114,15 +131,33 @@ def import_dataset(
                 detail=f"CSV is missing columns: {missing}"
             )
 
-        df["area"] = pd.to_numeric(df["area"], errors="coerce")
+        # Convert numeric columns
+        df["area"] = pd.to_numeric(
+            df["area"], errors="coerce"
+        )
+
         df["production"] = pd.to_numeric(
             df["production"], errors="coerce"
         )
-        df["year"] = pd.to_numeric(df["year"], errors="coerce")
 
-        df = df.dropna(subset=["district", "year", "season", "crop", "area"])
+        df["year"] = pd.to_numeric(
+            df["year"], errors="coerce"
+        )
+
+        # Remove invalid rows
+        df = df.dropna(
+            subset=[
+                "district",
+                "year",
+                "season",
+                "crop",
+                "area"
+            ]
+        )
+
         df = df[df["area"] >= 0]
 
+        # Prepare database records
         records = []
 
         for r in df.to_dict("records"):
@@ -135,7 +170,8 @@ def import_dataset(
                     crop=str(r["crop"]),
                     area=float(r["area"]),
                     production=(
-                        None if pd.isna(r["production"])
+                        None
+                        if pd.isna(r["production"])
                         else float(r["production"])
                     ),
                     source_dataset="crop_production_dataset1"
@@ -148,6 +184,7 @@ def import_dataset(
                 detail="No valid records found in the CSV"
             )
 
+        # Insert records in one transaction
         db.add_all(records)
         db.commit()
 
@@ -160,6 +197,7 @@ def import_dataset(
     except HTTPException:
         db.rollback()
         raise
+
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -338,16 +376,24 @@ def production_records(
     )
 
     if district:
-        q = q.filter(ProductionRecord.district == district)
+        q = q.filter(
+            ProductionRecord.district == district
+        )
 
     if crop:
-        q = q.filter(ProductionRecord.crop == crop)
+        q = q.filter(
+            ProductionRecord.crop == crop
+        )
 
     if season:
-        q = q.filter(ProductionRecord.season == season)
+        q = q.filter(
+            ProductionRecord.season == season
+        )
 
     if year:
-        q = q.filter(ProductionRecord.year == year)
+        q = q.filter(
+            ProductionRecord.year == year
+        )
 
     records = (
         q.order_by(ProductionRecord.year.desc())
@@ -379,8 +425,6 @@ def ml_metrics():
             status_code=404,
             detail="Models not trained yet. Run: python -m ml.train"
         )
-
-    import json
 
     return json.loads(
         p.read_text(encoding="utf-8")
