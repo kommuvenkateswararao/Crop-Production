@@ -1,3 +1,6 @@
+from pathlib import Path
+import os
+import secrets
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -54,6 +57,115 @@ def root():
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+# Temporary protected endpoint to import Andhra Pradesh dataset
+@app.post("/api/admin/import-dataset")
+def import_dataset(
+    import_token: str = Query(..., alias="token"),
+    db: Session = Depends(get_db)
+):
+    expected_token = os.getenv("CROP_IMPORT_TOKEN")
+
+    if not expected_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Import token is not configured"
+        )
+
+    if not secrets.compare_digest(import_token, expected_token):
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid import token"
+        )
+
+    # Prevent accidental duplicate imports
+    existing_count = db.query(ProductionRecord).filter(
+        ProductionRecord.state.ilike("%andhra pradesh%")
+    ).count()
+
+    if existing_count > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Import stopped: {existing_count} Andhra Pradesh records already exist"
+        )
+
+    csv_url = (
+        "https://raw.githubusercontent.com/"
+        "kommuvenkateswararao/Crop-Production/TRW/"
+        "datasets/Crop_Production_Datasets/andhra_pradesh/"
+        "andhra_pradesh_crop_production_dataset1.csv"
+    )
+
+    try:
+        df = pd.read_csv(csv_url)
+
+        if "district" not in df.columns and "district_name" in df.columns:
+            df = df.rename(columns={"district_name": "district"})
+
+        required = [
+            "district", "year", "season", "crop", "area", "production"
+        ]
+
+        missing = [c for c in required if c not in df.columns]
+
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"CSV is missing columns: {missing}"
+            )
+
+        df["area"] = pd.to_numeric(df["area"], errors="coerce")
+        df["production"] = pd.to_numeric(
+            df["production"], errors="coerce"
+        )
+        df["year"] = pd.to_numeric(df["year"], errors="coerce")
+
+        df = df.dropna(subset=["district", "year", "season", "crop", "area"])
+        df = df[df["area"] >= 0]
+
+        records = []
+
+        for r in df.to_dict("records"):
+            records.append(
+                ProductionRecord(
+                    state="Andhra Pradesh",
+                    district=str(r["district"]),
+                    year=int(r["year"]),
+                    season=str(r["season"]),
+                    crop=str(r["crop"]),
+                    area=float(r["area"]),
+                    production=(
+                        None if pd.isna(r["production"])
+                        else float(r["production"])
+                    ),
+                    source_dataset="crop_production_dataset1"
+                )
+            )
+
+        if not records:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid records found in the CSV"
+            )
+
+        db.add_all(records)
+        db.commit()
+
+        return {
+            "status": "success",
+            "imported_records": len(records),
+            "dataset": "Andhra Pradesh Dataset 1"
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Import failed: {str(e)}"
+        )
 
 
 # Dashboard summary
